@@ -1,11 +1,11 @@
-const express = require('express');
-const cors = require('cors');
-const OpenAI = require('openai');
+import express from 'express';
+import cors from 'cors';
+import OpenAI from 'openai';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ✅ CORS - UNE SEULE FOIS avec .gg ajouté
+// ✅ CORS - avec .gg ajouté
 app.use(cors({
   origin: [
     "https://crackthecode.ca",
@@ -55,17 +55,15 @@ app.post("/lyra", async (req, res) => {
 
     // Choisir le system prompt selon le mode
     let systemPrompt = systemPromptLyra;
+    let actualMessage = userMessage;
     
     if (mode === "gpt-hacking") {
       // Pour NEMESIS - terminal hacking
-      systemPrompt = userMessage.includes("[MODE=NEMESIS_HACKING_ONLY]") 
-        ? userMessage.split("Question de l'utilisateur:")[0]
-        : systemPromptLyra;
-      
-      // Si c'est NEMESIS, on prend juste la vraie question
-      const actualMessage = userMessage.includes("Question de l'utilisateur:")
-        ? userMessage.split("Question de l'utilisateur:")[1].trim()
-        : userMessage;
+      if (userMessage.includes("[MODE=NEMESIS_HACKING_ONLY]")) {
+        const parts = userMessage.split("Question de l'utilisateur:");
+        systemPrompt = parts[0];
+        actualMessage = parts[1]?.trim() || userMessage;
+      }
 
       const completion = await client.chat.completions.create({
         model: "gpt-4o-mini",
@@ -88,7 +86,7 @@ app.post("/lyra", async (req, res) => {
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
+        { role: "user", content: actualMessage },
       ],
       temperature: 0.8,
       max_tokens: 600,
