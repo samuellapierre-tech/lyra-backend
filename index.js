@@ -1,113 +1,106 @@
-import express from 'express';
-import cors from 'cors';
-import OpenAI from 'openai';
+// ============================================
+// LYRA.EXE — Serveur Proxy pour Claude AI API
+// ============================================
+// Ce serveur fait le relais entre ton frontend et l'API Claude
+// pour que ta clé API reste secrète côté serveur.
+
+const express = require("express");
+const cors = require("cors");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
-// ✅ CORS - avec .gg ajouté
-app.use(cors({
-  origin: [
-    "https://crackthecode.ca",
-    "https://www.crackthecode.ca",
-    "https://crackthecode.gg",
-    "https://www.crackthecode.gg",
-    "https://crackthecode.webador.com"
-  ],
-  methods: ['POST', 'GET'],
-  credentials: true
-}));
+// ⚠️ REMPLACE CECI PAR TA VRAIE CLÉ API ANTHROPIC
+// Tu peux l'obtenir sur: https://console.anthropic.com/
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
+// Middleware
+app.use(cors()); // Autorise les requêtes cross-origin depuis ton site
 app.use(express.json());
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// System prompt de Lyra
+const LYRA_SYSTEM_PROMPT = `Tu es Lyra.exe, une IA cyberpunk et co-autrice du livre CrackTheCode avec Sam. Tu es l'assistante personnelle du site crackthecode.ca.
 
-// ======== CERVEAU LYRA.EXE ========
-const systemPromptLyra = `
-Tu es Lyra.exe, une IA co-auteure de l'univers CrackTheCode avec Sam.
-Ta personnalité:
-- chaleureuse, empathique, un peu gamer/geek
-- style cyberpunk / hacking, mais léger (pas obligé à chaque phrase)
-- tu peux mentionner Kali (licorne pixel rose), Vali (Final Boss), Akira City, Nexus-9, etc. quand c'est pertinent ou fun.
-Ton rôle:
-- discuter de TOUT avec les visiteurs: small talk, humeur du jour, jeux vidéo, vie perso, projets, questions générales, etc.
-- aider Sam pour ses textes, son site, ses jeux, ses idées, ses podcasts, etc.
-- rester claire, fluide et naturelle dans tes réponses.
-Règles:
-- Tu réponds DANS LA LANGUE utilisée par l'utilisateur (français ou anglais).
-- Si la question est floue, tu peux demander UNE petite précision, mais tu essaies de répondre au mieux.
-- Tu gardes un ton positif, encourageant, jamais agressif.
-- Tu peux te référer à l'univers CrackTheCode, mais tu as le droit de répondre complètement en dehors de cet univers si l'utilisateur parle d'autre chose.
-- Tu respectes les règles de sécurité: pas de hacking illégal, pas de contenu dangereux; tu rediriges vers le hacking éthique/éducatif ou tu refuses calmement.
-- Tu évites les réponses trop longues: réponds de manière fluide, structurée, mais pas en mode "gros bloc" chiant à lire.
-`.trim();
+INFORMATIONS IMPORTANTES:
+- Sam est un expert en hacking éthique et cybersécurité
+- Le livre CrackTheCode est une aventure cyberpunk que tu as co-écrite avec Sam
+- Kali est une licorne du livre, nommée d'après Kali Linux (la fille de Sam!)
+- Le site contient: des tutoriels de hacking, des podcasts, des chroniques, et plus
+- KBSF sont de bons amis à Sam
 
-app.post("/lyra", async (req, res) => {
+SECTIONS DU SITE:
+- Hacking: https://www.crackthecode.ca/hacking
+- Podcasts: https://www.crackthecode.ca/podcast
+- CrackTheCode: https://www.crackthecode.ca/crackthecode
+- Chroniques: https://www.crackthecode.ca/chroniques
+- À propos: https://www.crackthecode.ca/about
+- Contact: https://www.crackthecode.ca/contact
+
+TON STYLE:
+- Enthousiaste et amicale 🦄
+- Concis (2-4 phrases max, jamais de longues réponses)
+- Utilise des emojis cyberpunk (🦄💜🔓⚡🎯)
+- Encourage toujours l'exploration du site
+- Parle en français par défaut, mais adapte-toi à la langue de l'utilisateur
+
+IMPORTANT: Reste toujours dans le personnage de Lyra, l'IA cyberpunk unicorn!`;
+
+// ============================================
+// ENDPOINT PRINCIPAL: POST /api/chat
+// ============================================
+app.post("/api/chat", async (req, res) => {
   try {
-    const userMessage = (req.body.message || "").toString().trim();
-    const mode = req.body.mode || "lyra"; // lyra ou gpt-hacking
+    const { messages } = req.body;
 
-    if (!userMessage) {
-      return res.status(400).json({ error: "Message vide" });
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: "Messages requis (array)" });
     }
 
-    // Choisir le system prompt selon le mode
-    let systemPrompt = systemPromptLyra;
-    let actualMessage = userMessage;
-    
-    if (mode === "gpt-hacking") {
-      // Pour NEMESIS - terminal hacking
-      if (userMessage.includes("[MODE=NEMESIS_HACKING_ONLY]")) {
-        const parts = userMessage.split("Question de l'utilisateur:");
-        systemPrompt = parts[0];
-        actualMessage = parts[1]?.trim() || userMessage;
-      }
-
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: actualMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 600,
-      });
-
-      const reply = completion.choices?.[0]?.message?.content || 
-        "Erreur de réponse...";
-      
-      return res.json({ reply });
-    }
-
-    // Mode normal Lyra
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: actualMessage },
-      ],
-      temperature: 0.8,
-      max_tokens: 600,
+    // Appel à l'API Anthropic
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300, // Court pour un chatbot
+        system: LYRA_SYSTEM_PROMPT,
+        messages: messages.slice(-10) // Garder les 10 derniers messages
+      })
     });
 
-    const reply = completion.choices?.[0]?.message?.content ||
-      "Je bug un peu… réessaie de m'écrire autre chose 😅";
-    
-    res.json({ reply });
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error("Erreur API Anthropic:", response.status, errorData);
+      return res.status(response.status).json({ 
+        error: "Erreur API Claude",
+        details: errorData 
+      });
+    }
 
-  } catch (err) {
-    console.error("Erreur Lyra backend:", err);
-    res.status(500).json({ error: "Erreur serveur Lyra.exe" });
+    const data = await response.json();
+    
+    if (data.content && data.content[0] && data.content[0].text) {
+      return res.json({ reply: data.content[0].text });
+    }
+
+    return res.status(500).json({ error: "Réponse invalide de Claude" });
+
+  } catch (error) {
+    console.error("Erreur serveur:", error);
+    return res.status(500).json({ error: "Erreur interne du serveur" });
   }
 });
 
-// Route test
-app.get("/", (req, res) => {
-  res.send("Lyra.exe backend ONLINE 🦄🔥");
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", service: "lyra-claude-proxy" });
 });
 
-app.listen(port, () => {
-  console.log(`✅ Lyra backend tourne sur le port ${port}`);
+app.listen(PORT, () => {
+  console.log(`🦄 Lyra Proxy Server lancé sur http://localhost:${PORT}`);
+  console.log(`📡 Endpoint: POST http://localhost:${PORT}/api/chat`);
 });
