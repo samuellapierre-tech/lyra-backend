@@ -1,12 +1,11 @@
-
 {
   "name": "lyra-claude-proxy",
   "version": "1.0.0",
   "description": "Proxy serveur pour connecter Lyra.exe à Claude AI",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "express": "^4.21.0",
